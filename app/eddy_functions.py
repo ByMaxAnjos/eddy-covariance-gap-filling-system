@@ -421,7 +421,7 @@ def encode_categorical_features(data: pd.DataFrame, categorical_cols: List[str])
 
     return df_encoded
 
-
+@st.cache_resource(show_spinner=False)
 def train_model(
     data: pd.DataFrame,
     target_col: str,
@@ -449,9 +449,9 @@ def train_model(
         model_params = {
             'objective': 'reg:squarederror',
             'booster': 'gbtree',
-            'n_estimators': 1000,
-            'learning_rate': 0.01,  # Slower but safer
-            'max_depth': 5,  # Shallower trees generalize better
+            'n_estimators': 100,
+            'learning_rate': 0.05,  # Slower but safer
+            'max_depth': 4,  # Shallower trees generalize better
             'min_child_weight': 3,  # Minimum sum of instance weight needed in a child
             'subsample': 0.7,  # Prevent overfitting by training on subsample
             'colsample_bytree': 0.7,  # Use a subset of features per tree
@@ -467,8 +467,8 @@ def train_model(
         model_time_based = XGBRegressor(**model_params)
     else:
         model_params = {
-        'n_estimators': 1000,
-        'max_depth': 20,  # Limit depth to avoid overfitting on small data
+        'n_estimators': 100,
+        'max_depth': 10,  # Limit depth to avoid overfitting on small data
         'min_samples_split': 4,
         'min_samples_leaf': 2,
         'max_features': 'sqrt',  # Good balance for regression
