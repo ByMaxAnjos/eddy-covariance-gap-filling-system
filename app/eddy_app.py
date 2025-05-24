@@ -809,7 +809,7 @@ elif st.session_state.active_tab == "Model Training":
             model_type = st.selectbox(
                 "Choose a machine learning algorithm:",
                 ["Random Forest", "XGBoost"],
-                index=1,
+                index=0,
                 help="Select the model type to train on your data."
             )
 
