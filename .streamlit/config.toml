@@ -13,3 +13,6 @@ base = "light"  # Light theme base
 
 [server]
 enableStaticServing = true
+headless = true
+enableCORS = false
+port = $PORT
