@@ -1,0 +1,15 @@
+[theme]
+# Primary colors
+primaryColor = "#1E5631"  # Forest Green - primary buttons and interactive elements
+backgroundColor = "#F8F9FA"  # Light background for the main content area
+secondaryBackgroundColor = "#FFFFFF"  # White for cards and containers
+textColor = "#333333"  # Dark gray for main text
+
+# Font settings
+font = "sans serif"
+
+# Other UI elements
+base = "light"  # Light theme base
+
+[server]
+enableStaticServing = true
