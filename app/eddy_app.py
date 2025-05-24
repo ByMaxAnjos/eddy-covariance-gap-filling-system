@@ -1016,11 +1016,14 @@ elif st.session_state.active_tab == "Gap-Filling":
                     missing_mask = df_gapfilled[selected_target].isnull()
                     X_missing_time_based = df_gapfilled.loc[missing_mask, time_features] 
                     X_missing_all_features = df_gapfilled.loc[missing_mask, all_features]
+                    
                     # Predict using both models
                     predicted_value_all_features = model_all.predict(X_missing_all_features)
                     predicted_value_time_based = model_time.predict(X_missing_time_based)
+                    
                     # Create a mask for rows where all features are present
                     all_features_present_mask = df_gapfilled.loc[missing_mask, all_features].notna().all(axis=1)
+                    
                     # Assign predicted values based on feature availability
                     df_gapfilled.loc[missing_mask, selected_target] = np.where(all_features_present_mask, 
                                                                   predicted_value_all_features, 
