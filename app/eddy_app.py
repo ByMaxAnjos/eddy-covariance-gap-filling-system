@@ -1014,33 +1014,21 @@ elif st.session_state.active_tab == "Gap-Filling":
 
                     # === Gap-filling ===
                     missing_mask = df_gapfilled[selected_target].isnull()
-                    missing_indices = df_gapfilled[missing_mask].index
-                    progress = st.progress(0)
-                    total = len(missing_indices)
-
-                    for i, idx in enumerate(missing_indices):
-                        row = df_gapfilled.loc[idx]
-
-                        try:
-                            if row[all_features].notna().all():
-                                X_input = row[all_features].to_frame().T
-                                X_input = X_input.astype({col: df_gapfilled[col].dtype for col in all_features})
-                                predicted = model_all.predict(X_input)[0]
-                            else:
-                                X_input = row[time_features].to_frame().T
-                                X_input = X_input.astype({col: df_gapfilled[col].dtype for col in time_features})
-                                predicted = model_time.predict(X_input)[0]
-
-                            df_gapfilled.at[idx, selected_target] = predicted
-                            df_gapfilled.at[idx, 'filled'] = 1
-                        except Exception as e:
-                            st.warning(f"⚠ Could not fill row {idx}: {e}")
-
-                        progress.progress((i + 1) / total)
-
+                    X_missing_time_based = df_gapfilled.loc[missing_mask, time_features] 
+                    X_missing_all_features = df_gapfilled.loc[missing_mask, all_features]
+                    # Predict using both models
+                    predicted_value_all_features = model_all.predict(X_missing_all_features)
+                    predicted_value_time_based = model_time.predict(X_missing_time_based)
+                    # Create a mask for rows where all features are present
+                    all_features_present_mask = df_gapfilled.loc[missing_mask, all_features].notna().all(axis=1)
+                    # Assign predicted values based on feature availability
+                    df_gapfilled.loc[missing_mask, selected_target] = np.where(all_features_present_mask, 
+                                                                  predicted_value_all_features, 
+                                                                  predicted_value_time_based)
+                    df_gapfilled.loc[missing_mask, 'filled'] = 1  # Mark filled rows as 1
                     st.session_state.filled_data = df_gapfilled
                     st.success("✅ Gap-filling completed using fallback model strategy!")
-
+                    
             except Exception as e:
                 st.error(f"❌ Error during gap-filling: {e}")
 
@@ -1173,33 +1161,21 @@ elif st.session_state.active_tab == "Gap-Fill Evaluation":
                     
                     # === Gap-filling ===
                     missing_mask = df_gapfilled_with_na[selected_target].isnull()
-                    missing_indices = df_gapfilled_with_na[missing_mask].index
                     original_data = df_gapfilled.loc[missing_mask, selected_target]
                     
-                    progress = st.progress(0)
-                    total = len(missing_indices)
-                    
-                    for i, idx in enumerate(missing_indices):
-                        row = df_gapfilled_with_na.loc[idx]
-
-                        try:
-                            if row[all_features].notna().all():
-                                X_input = row[all_features].to_frame().T
-                                X_input = X_input.astype({col: df_gapfilled_with_na[col].dtype for col in all_features})
-                                predicted = model_all.predict(X_input)[0]
-                            else:
-                                X_input = row[time_features].to_frame().T
-                                X_input = X_input.astype({col: df_gapfilled_with_na[col].dtype for col in time_features})
-                                predicted = model_time.predict(X_input)[0]
-
-                            df_gapfilled_with_na.at[idx, selected_target] = predicted
-                            df_gapfilled_with_na.at[idx, 'filled'] = 1
-                            
-                        except Exception as e:
-                            st.warning(f"⚠ Could not fill row {idx}: {e}")
-
-                        progress.progress((i + 1) / total)
-                    
+                    X_missing_time_based = df_gapfilled_with_na.loc[missing_mask, time_features] 
+                    X_missing_all_features = df_gapfilled_with_na.loc[missing_mask, all_features]
+                    # Predict using both models
+                    predicted_value_all_features = model_all.predict(X_missing_all_features)
+                    predicted_value_time_based = model_time.predict(X_missing_time_based)
+                    # Create a mask for rows where all features are present
+                    all_features_present_mask = df_gapfilled_with_na.loc[missing_mask, all_features].notna().all(axis=1)
+                    # Assign predicted values based on feature availability
+                    df_gapfilled_with_na.loc[missing_mask, selected_target] = np.where(all_features_present_mask, 
+                                                                  predicted_value_all_features, 
+                                                                  predicted_value_time_based)
+                    df_gapfilled_with_na.loc[missing_mask, 'filled'] = 1  # Mark filled rows as 1
+                
                     # Get the gap-filled values from 'df_gapfilled_eval' for the same rows
                     filled_values = df_gapfilled_with_na.loc[missing_mask, selected_target]
                             
