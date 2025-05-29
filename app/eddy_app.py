@@ -196,9 +196,9 @@ if st.session_state.active_tab == "Home":
     with col2:
         st.markdown(
             """
-            <h1 style='color: #1E5631;'>Eddy Covariance Gap-Filling System</h1>
+            <h1 style='color: #1E5631;'>Universal Time Series & Eddy Covariance Gap-Filling System</h1>
             <h4 style='color: #4A8B41; font-weight: normal;'>
-            An interactive platform for processing, filling, and evaluating gaps in flux tower datasets using Machine Learning models.
+            An interactive platform for processing, filling, and evaluating gaps in any time series - including flux tower datasets, using Machine Learning models.
             </h4>
             """, 
             unsafe_allow_html=True
@@ -206,17 +206,73 @@ if st.session_state.active_tab == "Home":
    
    # Horizontal rule
     st.markdown("<div class='section-header'><h2>🌍 Supported Datasets</h2></div>", unsafe_allow_html=True)
+       # Custom CSS for consistent styling and improved padding
+    st.markdown(
+        """
+        <style>
+        .dataset-column {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 5px; /* Added margin for spacing between columns */
+            height: 100%; /* Ensures columns have consistent height */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .dataset-column img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        .dataset-column h4 {
+            color: #1E5631; /* Changed to match app title color */
+            margin-top: 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0; /* Subtle separator */
+        }
+        .dataset-column ul {
+            list-style-type: none;
+            padding-left: 0;
+            margin-top: 10px;
+        }
+        .dataset-column ul li {
+            margin-bottom: 8px;
+            color: #4A8B41;
+            display: flex;
+            align-items: center;
+        }
+        .dataset-column ul li::before {
+            content: '✅'; /* Checkmark icon */
+            margin-right: 8px;
+            color: #1E5631; /* Green checkmark */
+            font-size: 1.1em;
+        }
+        .dataset-column p {
+            font-size: 0.9em;
+            color: #666;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-    dataset_col1, dataset_col2, dataset_col3 = st.columns(3)
-    
+    dataset_col1, dataset_col2, dataset_col3, dataset_col4 = st.columns(4)
+
     with dataset_col1:
         st.markdown(
             """
-            <div style='text-align: center;'>
-                <a href="https://fluxnet.org/" target="_blank"><img src="https://upload.wikimedia.org/wikipedia/commons/a/ac/Fluxnet_Logo.jpg" width="100"/></a>
-                <br/>
-                <a href="https://fluxnet.org/" target="_blank"><b>FLUXNET</b></a><br/>
-                Global network of micrometeorological tower sites measuring ecosystem fluxes.
+            <div class='dataset-column'>
+                <h4>Diverse Environmental & Energy Data</h4>
+                <ul>
+                    <li>Meteorological station data</li>
+                    <li>Climate reanalysis time series</li>
+                    <li>Remote sensing time series</li>
+                    <li>Hydrological series (e.g., river discharge, rainfall)</li>
+                    <li>Energy generation series (e.g., solar, wind)</li>
+                    <li>Any environmental or sensor data with gaps</li>
+                </ul>
             </div>
             """,
             unsafe_allow_html=True
@@ -224,11 +280,10 @@ if st.session_state.active_tab == "Home":
     with dataset_col2:
         st.markdown(
             """
-            <div style='text-align: center;'>
-                <a href="https://ameriflux.lbl.gov/" target="_blank"><img src="https://ameriflux.lbl.gov/wp-content/uploads/2014/06/Logo-AmerifluxNet-Horiz1.png" width="200"/></a>
-                <br/>
-                <a href="https://ameriflux.lbl.gov/" target="_blank"><b>AmeriFlux</b></a><br/>
-                North and South American flux data on ecosystem–atmosphere exchanges.
+            <div class='dataset-column' style='text-align: center;'>
+                <a href="https://fluxnet.org/" target="_blank"><img src="https://upload.wikimedia.org/wikipedia/commons/a/ac/Fluxnet_Logo.jpg" width="100"/></a>
+                <p><a href="https://fluxnet.org/" target="_blank"><b>FLUXNET</b></a><br/>
+                Global network of micrometeorological tower sites measuring ecosystem fluxes.</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -236,15 +291,26 @@ if st.session_state.active_tab == "Home":
     with dataset_col3:
         st.markdown(
             """
-            <div style='text-align: center;'>
-                <a href="https://icos-ri.eu/" target="_blank"><img src="https://www.icos-cp.eu/media/253" width="200"/></a>
-                <br/>
-                <a href="https://icos-ri.eu/" target="_blank"><b>ICOS</b></a><br/>
-                Integrated Carbon Observation System: harmonized GHG flux data across Europe.
+            <div class='dataset-column' style='text-align: center;'>
+                <a href="https://ameriflux.lbl.gov/" target="_blank"><img src="https://ameriflux.lbl.gov/wp-content/uploads/2014/06/Logo-AmerifluxNet-Horiz1.png" width="180"/></a>
+                <p><a href="https://ameriflux.lbl.gov/" target="_blank"><b>AmeriFlux</b></a><br/>
+                North and South American flux data on ecosystem–atmosphere exchanges.</p>
             </div>
             """,
             unsafe_allow_html=True
         )
+    with dataset_col4:
+        st.markdown(
+            """
+            <div class='dataset-column' style='text-align: center;'>
+                <a href="https://icos-ri.eu/" target="_blank"><img src="https://www.icos-cp.eu/media/253" width="180"/></a>
+                <p><a href="https://icos-ri.eu/" target="_blank"><b>ICOS</b></a><br/>
+                Integrated Carbon Observation System: harmonized GHG flux data across Europe.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
 
     # Main features section
     st.markdown("<div class='section-header'><h2>Key Features</h2></div>", unsafe_allow_html=True)

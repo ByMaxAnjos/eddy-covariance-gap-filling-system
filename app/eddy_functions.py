@@ -81,6 +81,37 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
         df.set_index('datetime', inplace=True)
         df.drop(columns=['date', 'time (UTC)'], inplace=True)
         return df, "EC Tower"
+    
+    # 💡 NEW: Universal fallback for general time series
+    else:
+        # Check common time columns
+        time_columns = [
+        'datetime', 'timestamp', 'date', 'time', 'date_time',
+        'datetime_utc', 'date_local', 'recorded_at', 'observation_time',
+        'sample_time', 'created_at', 'updated_at', 'event_time',
+        'start_time', 'end_time', 'log_time', 'measurement_time',
+        'collection_time', 'transaction_time', 'time_stamp',
+        'time_utc', 'utc_time', 'utc_datetime', 'local_time',
+        'local_datetime', 'time_local', 'time_recorded'
+    ]
+        found_time_col = None
+        for col in time_columns:
+            if col in df.columns:
+                found_time_col = col
+                break
+
+        if found_time_col:
+            try:
+                df['datetime'] = pd.to_datetime(df[found_time_col])
+                df.set_index('datetime', inplace=True)
+                df.drop(columns=[found_time_col], inplace=True)
+                return df, "GENERAL TIME SERIES"
+            except Exception as e:
+                st.warning(f"⚠ Failed to parse general time series column `{found_time_col}`: {e}")
+                return df, "UNKNOWN (failed time parse)"
+        else:
+            st.warning(f"⚠ No recognizable time column found. Please **Rename your time column** to match one of these names: `{time_columns}`")
+            return df, "UNKNOWN (no time column)"
 
 
 
