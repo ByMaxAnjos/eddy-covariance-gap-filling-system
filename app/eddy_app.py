@@ -347,7 +347,7 @@ if st.session_state.active_tab == "Home":
         st.markdown("""
         <div class="feature-card">
             <h3>🔍 Gap Detection & Filling</h3>
-            <p>Automatically identify and fill missing CO₂ and other flux data from eddy covariance towers using advanced machine learning techniques.</p>
+            <p>Pinpoints missing observations and reconstructs them with ML-driven estimates—preserving the rhythm and seasonality of your time-series..</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -355,7 +355,7 @@ if st.session_state.active_tab == "Home":
         st.markdown("""
         <div class="feature-card">
             <h3>📊 Advanced Analytics</h3>
-            <p>Analyze patterns across eddy covariance variables with interactive visualizations and comprehensive statistical tools.</p>
+            <p>Explore patterns, trends, and anomalies in flux and environmental data using interactive plots and robust statistical summaries.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -363,7 +363,7 @@ if st.session_state.active_tab == "Home":
         st.markdown("""
         <div class="feature-card">
             <h3>🧠 Machine Learning Models</h3>
-            <p>Compare modeling strategies using Random Forest and XGBoost with comprehensive validation metrics.</p>
+            <p>Leverage state-of-the-art models like Random Forest and XGBoost to predict missing values, with detailed performance metrics and visual diagnostics.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -500,7 +500,7 @@ if st.session_state.active_tab == "Upload & Explore":
     # Page header
     colored_header(
         label="Data Upload & Exploration",
-        description="Import and analyze your eddy covariance data",
+        description="Import and understand your data",
         color_name="green-70"
     )
 
@@ -510,7 +510,7 @@ if st.session_state.active_tab == "Upload & Explore":
         st.subheader("Upload Data")
         #uploaded_file = st.file_uploader("Choose a CSV or txt file", type=["csv", "txt"])
         #use_example = st.checkbox("Use example dataset", value=False)
-        upload_method = st.radio("Choose data upload method:", ["Upload CSV", "Upload ZIP", "Use example dataset"])
+        upload_method = st.radio("Choose data upload format:", ["Upload CSV", "Upload ZIP", "Use example dataset"])
         
         if upload_method == "Upload CSV":
             uploaded_file = st.file_uploader("📄 Upload CSV or TXT", type=["csv", "txt"])
@@ -650,7 +650,7 @@ elif st.session_state.active_tab == "Data Preprocessing":
     # Page header
     colored_header(
         label="Data Preprocessing",
-        description="Prepare your eddy covariance data",
+        description="Prepare your data",
         color_name="green-70"
     )
 
@@ -682,17 +682,32 @@ elif st.session_state.active_tab == "Data Preprocessing":
                 elif outlier_method == "Modified Z-score":
                     mod_z_threshold = st.slider("Modified Z-score threshold", 3.0, 10.0, 3.5, 0.1)
                     
-            apply_qc_flags = st.checkbox("Apply existing QC flags", value=False)
-            qc_columns = [col for col in st.session_state.data.columns if col.lower().endswith('qc')]
-            if apply_qc_flags and qc_columns:
-                qc_threshold = st.number_input(
-                    "Maximum acceptable QC flag value:",
-                    min_value=0,       # Ensures non-negative values
-                    value=1,            # Default value (previously index=1)
-                    step=1,             # Integer steps
-                    help="0 = Highest quality, 1 = Medium quality, 2 = Low quality (or custom scale)"
+            apply_qc_flags = st.checkbox("Apply quality-control filter", value=False)
+
+            if apply_qc_flags:
+
+                # 1️⃣  Pick one or more columns that *contain* QC / flag values
+                qc_columns = st.multiselect(
+                    "Select QC / flag column(s):",
+                    options=st.session_state.data.columns.tolist()
                 )
-        
+                if qc_columns:
+                    # 3️⃣  For each chosen QC column, let user set a threshold
+                    qc_thresholds = {}
+                    for qc_col in qc_columns:
+                        qc_min = int(st.session_state.data[qc_col].min(skipna=True))
+                        qc_max = int(st.session_state.data[qc_col].max(skipna=True))
+                        qc_thresholds[qc_col] = st.slider(
+                            f"Maximum acceptable value for **{qc_col}**:",
+                            min_value=qc_min,
+                            max_value=qc_max,
+                            value=min(qc_max, 1),
+                            step=1,
+                            help = "0 = Highest quality, 1 = Medium quality, 2 = Low quality (or custom scale).Please, ensure the correct QC value. Check metadata out!"
+                        )   
+                else:
+                    st.info("Select at least one QC column to proceed.")
+       
         #For Outliers
         flux_vars = ["date", "time", "datetime", "co2_flux_qc", "month"]
         actual_flux_cols_out = [col for col in st.session_state.data.columns if col not in flux_vars]
@@ -705,7 +720,7 @@ elif st.session_state.active_tab == "Data Preprocessing":
         col1, col2 = st.columns([1, 1])
 
         with col1:
-            if st.button("Preprocess Data", key="preprocess_button"):
+            if st.button("⚙️ Preprocess Data", key="preprocess_button"):
                 try:
                     with st.spinner("Preprocessing data..."):
                         # Apply preprocessing based on selected options
@@ -1390,7 +1405,7 @@ if st.session_state.active_tab != "Home":
     st.markdown(
         """
         <div class='footer'>
-            <p>© 2025 Max Anjos • Eddy Covariance Gap-Filling System | Version 1.0</p>
+            <p>© 2025 Max Anjos • Eddy System | Version 1.0</p>
         </div>
         """,
         unsafe_allow_html=True
