@@ -916,8 +916,8 @@ elif st.session_state.active_tab == "Model Training":
 
             elif model_type == "XGBoost":
                 n_estimators = st.slider("Number of Trees (n_estimators):", 50, 500, 100, step=10)
-                learning_rate = st.select_slider("Learning Rate (learning_rate):", options=[0.001, 0.01, 0.05, 0.1, 0.2, 0.3],value=0.05)
-                max_depth = st.slider("Maximum Tree Depth (max_depth):", 3, 10, 4)
+                learning_rate = st.select_slider("Learning Rate (learning_rate):", options=[0.001, 0.01, 0.05, 0.1, 0.2, 0.3],value=0.01)
+                max_depth = st.slider("Maximum Tree Depth (max_depth):", 3, 10, 5)
 
                 model_params = {
                     'objective': 'reg:squarederror',
