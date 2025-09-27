@@ -484,6 +484,49 @@ if st.session_state.active_tab == "Home":
                 unsafe_allow_html=True
             )
     
+    
+    def show_donation_message():
+       st.markdown(
+        """
+        <div style="
+            background: #FFFFFF;
+            color: #333333;
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 1.5rem 0;
+        ">
+            <h2 style="color:#1E5631; margin-bottom: 0.5rem; font-weight:700;">
+                💚 Support This Platform
+            </h2>
+            <p style="font-size: 1.1rem; margin-bottom: 1.2rem;">
+                Your contribution helps us maintain and improve this Platform 🌍
+            </p>
+            <form action="https://www.paypal.com/donate" method="post" target="_top">
+                <input type="hidden" name="hosted_button_id" value="PX3Y9F2RLQ9QL" />
+                <button type="submit" 
+                    style="
+                        background-color: #1E5631;
+                        color: white;
+                        padding: 0.75rem 2rem;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 1rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    "
+                    onmouseover="this.style.backgroundColor='#154823';" 
+                    onmouseout="this.style.backgroundColor='#1E5631';">
+                    ☕ Donate with PayPal
+                </button>
+            </form>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    show_donation_message()
     # Footer
     st.markdown(
         """
