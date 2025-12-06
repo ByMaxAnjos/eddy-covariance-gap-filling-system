@@ -516,37 +516,82 @@ def train_model(
 
     return model_all_features, model_time_based
 
-# ✅ Improved introduce_nan with logging and reliability
-def introduce_nan(data: pd.DataFrame, target_cols: list, nan_percentage: float = 0.2, seed: int = 42) -> pd.DataFrame:
+def introduce_nan(data: pd.DataFrame, target_cols: list, nan_percentage: float = 0.2, 
+                  mechanism: str = 'MCAR', dependency_col: str = None, seed: int = 42) -> pd.DataFrame:
     """
-    Introduce artificial NaNs into specified target columns for evaluation.
+    Introduce artificial NaNs into target columns based on MCAR, MAR, or MNAR mechanisms.
 
     Parameters:
-    - data (pd.DataFrame): Dataset to inject NaNs into.
-    - target_cols (list): Columns to target.
-    - nan_percentage (float): Fraction of rows to nullify.
-    - seed (int): Random seed.
-
-    Returns:
-    - pd.DataFrame with NaNs introduced.
+    - data: DataFrame input.
+    - target_cols: List of columns to inject NaNs.
+    - nan_percentage: Fraction of rows to nullify (0.0 to 1.0).
+    - mechanism: 'MCAR' (Random), 'MAR' (Dependent on another col), 'MNAR' (Dependent on target value).
+    - dependency_col: The column name that drives missingness (required for MAR).
+    - seed: Random seed for reproducibility.
     """
     df_nan = data.copy()
     rng = np.random.default_rng(seed)
-    n_rows = len(df_nan)
-
+    
     for col in target_cols:
-        if col in df_nan.columns:
-            available = df_nan[df_nan[col].notna()].index
-            n_nan = int(len(available) * nan_percentage)
-            if n_nan == 0:
-                print(f"⚠️ No NaNs introduced in '{col}': not enough clean values.")
-                continue
-            selected = rng.choice(available, size=n_nan, replace=False)
-            df_nan.loc[selected, col] = np.nan
-            print(f"✅ Introduced {n_nan} NaNs in column '{col}'.")
+        if col not in df_nan.columns:
+            continue
+            
+        # Indices válidos (onde não é NaN originalmente)
+        valid_idx = df_nan[df_nan[col].notna()].index
+        n_nan = int(len(valid_idx) * nan_percentage)
+        
+        if n_nan == 0:
+            continue
 
+        if mechanism == 'MCAR':
+            # Missing Completely At Random: Simplesmente sorteia índices
+            selected_indices = rng.choice(valid_idx, size=n_nan, replace=False)
+
+        elif mechanism == 'MAR':
+            # Missing At Random: A chance de faltar depende de OUTRA variável (ex: Chuva/Temp)
+            if dependency_col and dependency_col in df_nan.columns:
+                # Normaliza a variável de dependência entre 0 e 1 para criar pesos de probabilidade
+                # Valores mais altos da variável de dependência aumentam a chance de NaN no target
+                dep_values = df_nan.loc[valid_idx, dependency_col].abs()
+                
+                # Tratamento para evitar divisão por zero ou colunas constantes
+                if dep_values.max() == dep_values.min():
+                     weights = np.ones(len(valid_idx))
+                else:
+                    weights = (dep_values - dep_values.min()) / (dep_values.max() - dep_values.min())
+                    # Adiciona um pequeno epsilon para garantir que todos tenham chance mínima > 0
+                    weights = weights + 0.1 
+                
+                # Normaliza para somar 1 (necessário para np.random.choice)
+                probs = weights / weights.sum()
+                
+                selected_indices = rng.choice(valid_idx, size=n_nan, replace=False, p=probs)
+            else:
+                print(f"⚠️ MAR selected but dependency_col '{dependency_col}' not found. Fallback to MCAR.")
+                selected_indices = rng.choice(valid_idx, size=n_nan, replace=False)
+
+        elif mechanism == 'MNAR':
+            # Missing Not At Random: A chance de faltar depende do PRÓPRIO valor (ex: saturação em fluxos altos)
+            # Vamos assumir que valores absolutos mais altos têm maior chance de falhar
+            target_values = df_nan.loc[valid_idx, col].abs()
+            
+            if target_values.max() == target_values.min():
+                weights = np.ones(len(valid_idx))
+            else:
+                weights = (target_values - target_values.min()) / (target_values.max() - target_values.min())
+                weights = weights + 0.1 # Epsilon base
+            
+            probs = weights / weights.sum()
+            selected_indices = rng.choice(valid_idx, size=n_nan, replace=False, p=probs)
+
+        else:
+            # Fallback
+            selected_indices = rng.choice(valid_idx, size=n_nan, replace=False)
+
+        # Aplica os NaNs
+        df_nan.loc[selected_indices, col] = np.nan
+        
     return df_nan
-
 ## Advanced Flux Visualization
 def plot_flux_partitioning(df: pd.DataFrame) -> pd.DataFrame:
     st.subheader("Flux Partitioning Analysis")
