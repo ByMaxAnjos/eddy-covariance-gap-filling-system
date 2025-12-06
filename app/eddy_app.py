@@ -485,58 +485,57 @@ if st.session_state.active_tab == "Home":
             )
     
     
-    from streamlit_extras.stylable_container import stylable_container
 
-def show_feedback_box():
-    github_issues_url = "https://github.com/ByMaxAnjos/eddy-covariance-gap-filling-system/issues"
-    
-    # Define o estilo CSS para o container
-    css_style = """
-    {
-        border: 2px solid #1E5631; /* Cor de borda principal */
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 6px 12px rgba(30, 86, 49, 0.2); /* Sombra baseada na cor principal */
-        text-align: center;
-        margin: 1.5rem 0;
-        background-color: #f9fdf9; /* Fundo muito claro */
-    }
-    """
-    
-    with stylable_container(
-        key="feedback_box_container",
-        css_styles=css_style
-    ):
-        st.markdown(
-            f"""
-            <h2 style="color:#1E5631; margin-bottom: 0.5rem; font-weight:700;">
-                💡 Contribute and Give Feedback
-            </h2>
-            <p style="font-size: 1.1rem; color: #333333; margin-bottom: 1.2rem;">
-                We are constantly improving the platform. Your ideas and bug reports are invaluable! 🌍
-            </p>
-            
-            <a href="{github_issues_url}" target="_blank"
-                style="
-                    background-color: #007bff;
-                    color: white;
-                    padding: 0.75rem 2rem;
-                    border: none;
-                    border-radius: 8px;
-                    font-size: 1rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    text-decoration: none; 
-                    display: inline-block;
-                "
-                onmouseover="this.style.backgroundColor='#0056b3';" 
-                onmouseout="this.style.backgroundColor='#007bff';">
-                Open an Issue on GitHub
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+    def show_feedback_box():
+        github_issues_url = "https://github.com/ByMaxAnjos/eddy-covariance-gap-filling-system/issues"
+        
+        # Define o estilo CSS para o container
+        css_style = """
+        {
+            border: 2px solid #1E5631; /* Cor de borda principal */
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 6px 12px rgba(30, 86, 49, 0.2); /* Sombra baseada na cor principal */
+            text-align: center;
+            margin: 1.5rem 0;
+            background-color: #f9fdf9; /* Fundo muito claro */
+        }
+        """
+        
+        with stylable_container(
+            key="feedback_box_container",
+            css_styles=css_style
+        ):
+            st.markdown(
+                f"""
+                <h2 style="color:#1E5631; margin-bottom: 0.5rem; font-weight:700;">
+                    💡 Contribute and Give Feedback
+                </h2>
+                <p style="font-size: 1.1rem; color: #333333; margin-bottom: 1.2rem;">
+                    We are constantly improving the platform. Your ideas and bug reports are invaluable! 🌍
+                </p>
+                
+                <a href="{github_issues_url}" target="_blank"
+                    style="
+                        background-color: #007bff;
+                        color: white;
+                        padding: 0.75rem 2rem;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 1rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        text-decoration: none; 
+                        display: inline-block;
+                    "
+                    onmouseover="this.style.backgroundColor='#0056b3';" 
+                    onmouseout="this.style.backgroundColor='#007bff';">
+                    Open an Issue on GitHub
+                </a>
+                """,
+                unsafe_allow_html=True
+            )
 
     show_feedback_box()
     # Footer
