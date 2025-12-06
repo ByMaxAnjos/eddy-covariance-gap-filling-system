@@ -529,11 +529,11 @@ if st.session_state.active_tab == "Home":
                         text-decoration: none; 
                         display: inline-block;
                     "
-                    onmouseover="this.style.backgroundColor='#154823';" /* Verde mais escuro no hover */
+                    onmouseover="this.style.backgroundColor='#154823';" 
                     onmouseout="this.style.backgroundColor='#1E5631';">
                     Open an Issue on GitHub
                 </a>
-                                """,
+                """,
                 unsafe_allow_html=True
             )
 
