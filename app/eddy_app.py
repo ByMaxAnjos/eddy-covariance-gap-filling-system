@@ -485,29 +485,30 @@ if st.session_state.active_tab == "Home":
             )
     
     
-    def show_donation_message():
-       st.markdown(
-        """
-        <div style="
-            background: #FFFFFF;
-            color: #333333;
-            padding: 1.5rem;
-            border-radius: 12px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin: 1.5rem 0;
-        ">
-            <h2 style="color:#1E5631; margin-bottom: 0.5rem; font-weight:700;">
-                💚 Support This Platform
-            </h2>
-            <p style="font-size: 1.1rem; margin-bottom: 1.2rem;">
-                Your contribution helps us maintain and improve this Platform 🌍
-            </p>
-            <form action="https://www.paypal.com/donate" method="post" target="_top">
-                <input type="hidden" name="hosted_button_id" value="RHT74PFXMT3V6" />
-                <button type="submit" 
+    def show_feedback_message():
+        github_issues_url = "https://github.com/ByMaxAnjos/eddy-covariance-gap-filling-system/issues"
+        
+        st.markdown(
+            f"""
+            <div style="
+                background: #FFFFFF;
+                color: #333333;
+                padding: 1.5rem;
+                border-radius: 12px;
+                text-align: center;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                margin: 1.5rem 0;
+            ">
+                <h2 style="color:#1E5631; margin-bottom: 0.5rem; font-weight:700;">
+                    💡 Contribute and Give Feedback
+                </h2>
+                <p style="font-size: 1.1rem; margin-bottom: 1.2rem;">
+                    We are constantly improving the platform. Your ideas and bug reports are invaluable! 🌍
+                </p>
+                
+                <a href="{github_issues_url}" target="_blank"
                     style="
-                        background-color: #1E5631;
+                        background-color: #007bff; /* Usando um azul padrão para ação de link */
                         color: white;
                         padding: 0.75rem 2rem;
                         border: none;
@@ -516,17 +517,19 @@ if st.session_state.active_tab == "Home":
                         font-weight: 600;
                         cursor: pointer;
                         transition: all 0.3s ease;
+                        text-decoration: none; /* Remove sublinhado do link */
+                        display: inline-block; /* Essencial para que o 'a' se comporte como um botão */
                     "
-                    onmouseover="this.style.backgroundColor='#154823';" 
-                    onmouseout="this.style.backgroundColor='#1E5631';">
-                    ☕ Donate with PayPal
-                </button>
-            </form>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    show_donation_message()
+                    onmouseover="this.style.backgroundColor='#0056b3';" 
+                    onmouseout="this.style.backgroundColor='#007bff';">
+                    Open an Issue on GitHub
+                </a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    show_feedback_message()
     # Footer
     st.markdown(
         """
@@ -536,7 +539,6 @@ if st.session_state.active_tab == "Home":
         """,
         unsafe_allow_html=True
     )
-    
 # 1. Upload & Explore Page
 if st.session_state.active_tab == "Upload & Explore":
     
@@ -1544,14 +1546,17 @@ elif st.session_state.active_tab == "About":
         * **Categorical Encoding:** Features like `wind_direction` or `stability_class` are automatically one-hot encoded (converted to binary numbers) so the math works.
         * **Validation:** We use internal testing (RMSE, R²) to check model health, but we highly recommend using the **Evaluation Tab** to simulate artificial gaps and see how the model performs on *your* specific dataset structure.
         """)
-
-
 #Footer
 if st.session_state.active_tab != "Home":
     st.markdown(
-        """
+        f"""
         <div class='footer'>
             <p>© 2025 Max Anjos • Eddy System | Version 1.0</p>
+            <p>
+                <a href="https://github.com/ByMaxAnjos/eddy-covariance-gap-filling-system/issues" target="_blank">
+                    Have Feedback or Suggestions? Open an Issue on GitHub.
+                </a>
+            </p>
         </div>
         """,
         unsafe_allow_html=True
