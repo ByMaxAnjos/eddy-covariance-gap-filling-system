@@ -512,12 +512,12 @@ if st.session_state.active_tab == "Home":
                     💡 Contribute and Give Feedback
                 </h2>
                 <p style="font-size: 1.1rem; color: #333333; margin-bottom: 1.2rem;">
-                    We are constantly improving the platform. Your ideas and bug reports are invaluable! 🌍
+                    We are constantly improving the platform. Your ideas and bug reports are important! 🌍
                 </p>
                 
                 <a href="{github_issues_url}" target="_blank"
                     style="
-                        background-color: #007bff;
+                        background-color: #1E5631;
                         color: white;
                         padding: 0.75rem 2rem;
                         border: none;
@@ -529,11 +529,11 @@ if st.session_state.active_tab == "Home":
                         text-decoration: none; 
                         display: inline-block;
                     "
-                    onmouseover="this.style.backgroundColor='#0056b3';" 
-                    onmouseout="this.style.backgroundColor='#007bff';">
+                    onmouseover="this.style.backgroundColor='#154823';" /* Verde mais escuro no hover */
+                    onmouseout="this.style.backgroundColor='#1E5631';">
                     Open an Issue on GitHub
                 </a>
-                """,
+                                """,
                 unsafe_allow_html=True
             )
 
