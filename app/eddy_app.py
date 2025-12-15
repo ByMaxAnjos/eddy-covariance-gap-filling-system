@@ -1490,7 +1490,7 @@ elif st.session_state.active_tab == "About":
     st.markdown("""
     ### 🎯 Objective
     The goal of this platform is to transform your raw, gapped times series and Eddy Covariance data into a **continuous, high-quality time series**. 
-    To achieve this, we train machine earning models specifically on **your uploaded data**.
+    To achieve this, we train machine learning models specifically on **your uploaded data**.
     """)
     st.divider()
 
