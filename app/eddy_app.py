@@ -21,7 +21,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from typing import List, Optional, Tuple, Dict, Union, Any
 import requests
 from streamlit_option_menu import option_menu
-from streamlit_extras.card import card
+#from streamlit_extras.card import card
 from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.add_vertical_space import add_vertical_space
