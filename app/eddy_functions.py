@@ -270,7 +270,9 @@ def create_lag_features(data: pd.DataFrame, target_cols: List[str], lag_periods:
         pd.DataFrame: DataFrame with added lag features.
     """
     df_lag = data.copy()
-    shift_sign = 1 if shift_direction.lower() == 'forward' else -1
+    # 'backward' (default) → shift(+lag) → past values at each position (no leakage)
+    # 'forward'            → shift(-lag) → future values (only for non-predictive uses)
+    shift_sign = -1 if shift_direction.lower() == 'forward' else 1
 
     for col in target_cols:
         if col not in df_lag.columns:
@@ -494,19 +496,24 @@ def train_model(
             'verbosity': 0,
             'missing': np.nan
         }
+        # User-supplied hyperparameters override defaults (internal keys like
+        # 'missing' and 'verbosity' are not exposed in the UI, so they are safe)
+        model_params = {**model_params, **base_params}
         model_all_features = XGBRegressor(**model_params)
         model_time_based = XGBRegressor(**model_params)
     else:
         model_params = {
-        'n_estimators': 100,
-        'max_depth': 10,  # Limit depth to avoid overfitting on small data
-        'min_samples_split': 4,
-        'min_samples_leaf': 2,
-        'max_features': 'sqrt',  # Good balance for regression
-        'bootstrap': True,
-        'random_state': 42,
-        'n_jobs': -1,
+            'n_estimators': 100,
+            'max_depth': 10,  # Limit depth to avoid overfitting on small data
+            'min_samples_split': 4,
+            'min_samples_leaf': 2,
+            'max_features': 'sqrt',  # Good balance for regression
+            'bootstrap': True,
+            'random_state': 42,
+            'n_jobs': -1,
         }
+        # User-supplied hyperparameters override defaults
+        model_params = {**model_params, **base_params}
         model_all_features = RandomForestRegressor(**model_params)
         model_time_based = RandomForestRegressor(**model_params)
 

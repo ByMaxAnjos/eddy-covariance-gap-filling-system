@@ -47,6 +47,8 @@ with open('static/custom.css') as f:
 # Define app state
 if 'data' not in st.session_state:
     st.session_state.data = None
+if 'original_data' not in st.session_state:
+    st.session_state.original_data = None
 if 'models' not in st.session_state:
     st.session_state.models = {}
 if 'predictions' not in st.session_state:
@@ -571,6 +573,7 @@ if st.session_state.active_tab == "Upload & Explore":
                     df = pd.read_csv(uploaded_file)
                     df, source = detect_and_preprocess_dataset(df)
                     st.session_state.data = df
+                    st.session_state.original_data = df.copy()
                     st.success(f"✅ File loaded. Format detected: **{source}**")
                 except Exception as e:
                     st.error(f"❌ Error loading file: {e}")
@@ -578,10 +581,12 @@ if st.session_state.active_tab == "Upload & Explore":
             df, source = upload_zip_and_extract_csv()
             if df is not None:
                 st.session_state.data = df
+                st.session_state.original_data = df.copy()
         elif upload_method == "Use example dataset":
             df = load_example_data()
             if df is not None:
                 st.session_state.data = df
+                st.session_state.original_data = df.copy()
                 st.success("✅ Example dataset loaded successfully!")
 
     with col2:
@@ -782,9 +787,9 @@ elif st.session_state.active_tab == "Data Preprocessing":
                         if apply_qc_flags and qc_columns:
                             for flux_col in actual_flux_cols_flag:
                                 qc_col = f"qc_{flux_col}"
-                                if qc_col in preprocessed_data.columns:
-                                    # Mark as NaN where QC flag exceeds threshold
-                                    mask = preprocessed_data[qc_col] > qc_threshold
+                                if qc_col in preprocessed_data.columns and qc_col in qc_thresholds:
+                                    # Mark as NaN where QC flag exceeds the per-column threshold
+                                    mask = preprocessed_data[qc_col] > qc_thresholds[qc_col]
                                     preprocessed_data.loc[mask, flux_col] = np.nan
                         
                         # Handle outliers if selected
@@ -818,12 +823,11 @@ elif st.session_state.active_tab == "Data Preprocessing":
         with col2:
             if st.button("Reset to Original Data", key="reset_button"):
                 try:
-                    # Reload original data or example data
-                    if 'original_data' in st.session_state:
+                    if st.session_state.original_data is not None:
                         st.session_state.data = st.session_state.original_data.copy()
+                        st.success("Data reset to original!")
                     else:
-                        st.session_state.data = load_example_data()
-                    st.success("Data reset to original!")
+                        st.warning("No original dataset found. Please upload or load data first.")
                 except Exception as e:
                     st.error(f"Error resetting data: {str(e)}")
 
