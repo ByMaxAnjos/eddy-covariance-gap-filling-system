@@ -297,16 +297,19 @@ def create_rolling_features(data: pd.DataFrame, target_cols: List[str], windows:
         pd.DataFrame: DataFrame with added rolling features.
     """
     for target_col in target_cols:
+        if target_col not in data.columns:
+            continue
+        source = data[target_col].shift(1)
         for window in windows:
             for stat in stats:
                 if stat == 'mean':
-                    data[f'{target_col}_rolling_{window}_{stat}'] = data[target_col].rolling(window=window, min_periods=1).mean()
+                    data[f'{target_col}_rolling_{window}_{stat}'] = source.rolling(window=window, min_periods=1).mean()
                 elif stat == 'std':
-                    data[f'{target_col}_rolling_{window}_{stat}'] = data[target_col].rolling(window=window, min_periods=1).std()
+                    data[f'{target_col}_rolling_{window}_{stat}'] = source.rolling(window=window, min_periods=1).std()
                 elif stat == 'min':
-                    data[f'{target_col}_rolling_{window}_{stat}'] = data[target_col].rolling(window=window, min_periods=1).min()
+                    data[f'{target_col}_rolling_{window}_{stat}'] = source.rolling(window=window, min_periods=1).min()
                 elif stat == 'max':
-                    data[f'{target_col}_rolling_{window}_{stat}'] = data[target_col].rolling(window=window, min_periods=1).max()
+                    data[f'{target_col}_rolling_{window}_{stat}'] = source.rolling(window=window, min_periods=1).max()
                 else:
                     raise ValueError(f"Invalid statistic: {stat}")
     return data
@@ -454,27 +457,10 @@ def encode_categorical_features(data: pd.DataFrame, categorical_cols: List[str])
 
     return df_encoded
 
-@st.cache_resource(show_spinner=False)
-def train_model(
-    data: pd.DataFrame,
-    target_col: str,
-    selected_features: List[str],
-    time_based_features: List[str],
-    model_type: str = 'Random Forest',
+def _build_regressor(
+    model_type: str,
     base_params: Optional[Dict[str, Union[int, float]]] = None
-) -> Tuple[Union[XGBRegressor, RandomForestRegressor], Union[XGBRegressor, RandomForestRegressor]]:
-    """
-    Trains two models: one with selected features and one with time-based features.
-    Returns both trained models.
-    """
-    df_train_base = data.copy().dropna(subset=[target_col])
-
-    X_train_all = df_train_base[selected_features]
-    y_train_all = df_train_base[target_col]
-
-    X_train_time = df_train_base[time_based_features]
-    y_train_time = df_train_base[target_col]
-
+) -> Union[XGBRegressor, RandomForestRegressor]:
     if base_params is None:
         base_params = {}
 
@@ -483,45 +469,273 @@ def train_model(
             'objective': 'reg:squarederror',
             'booster': 'gbtree',
             'n_estimators': 100,
-            'learning_rate': 0.05,  # Slower but safer
-            'max_depth': 4,  # Shallower trees generalize better
-            'min_child_weight': 3,  # Minimum sum of instance weight needed in a child
-            'subsample': 0.7,  # Prevent overfitting by training on subsample
-            'colsample_bytree': 0.7,  # Use a subset of features per tree
-            'gamma': 0.1,  # Minimum loss reduction to make a split
-            'reg_alpha': 0.1,  # L1 regularization (sparse models)
-            'reg_lambda': 1.0,  # L2 regularization
+            'learning_rate': 0.05,
+            'max_depth': 4,
+            'min_child_weight': 3,
+            'subsample': 0.7,
+            'colsample_bytree': 0.7,
+            'gamma': 0.1,
+            'reg_alpha': 0.1,
+            'reg_lambda': 1.0,
             'random_state': 42,
             'n_jobs': -1,
             'verbosity': 0,
             'missing': np.nan
         }
-        # User-supplied hyperparameters override defaults (internal keys like
-        # 'missing' and 'verbosity' are not exposed in the UI, so they are safe)
         model_params = {**model_params, **base_params}
-        model_all_features = XGBRegressor(**model_params)
-        model_time_based = XGBRegressor(**model_params)
+        return XGBRegressor(**model_params)
+
+    model_params = {
+        'n_estimators': 100,
+        'max_depth': 10,
+        'min_samples_split': 4,
+        'min_samples_leaf': 2,
+        'max_features': 'sqrt',
+        'bootstrap': True,
+        'random_state': 42,
+        'n_jobs': -1,
+    }
+    model_params = {**model_params, **base_params}
+    return RandomForestRegressor(**model_params)
+
+def _regression_metrics(y_true: pd.Series, y_pred: np.ndarray) -> Dict[str, float]:
+    residuals = y_true - y_pred
+    if len(y_true) > 1:
+        slope, intercept, _, _, _ = stats.linregress(y_true, y_pred)
     else:
-        model_params = {
-            'n_estimators': 100,
-            'max_depth': 10,  # Limit depth to avoid overfitting on small data
-            'min_samples_split': 4,
-            'min_samples_leaf': 2,
-            'max_features': 'sqrt',  # Good balance for regression
-            'bootstrap': True,
-            'random_state': 42,
-            'n_jobs': -1,
-        }
-        # User-supplied hyperparameters override defaults
-        model_params = {**model_params, **base_params}
-        model_all_features = RandomForestRegressor(**model_params)
-        model_time_based = RandomForestRegressor(**model_params)
+        slope, intercept = np.nan, np.nan
 
-    # Fit both models
-    model_all_features.fit(X_train_all, y_train_all)
-    model_time_based.fit(X_train_time, y_train_time)
+    return {
+        'r2': r2_score(y_true, y_pred) if len(y_true) > 1 else np.nan,
+        'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'mae': mean_absolute_error(y_true, y_pred),
+        'bias': float(np.mean(y_pred - y_true)),
+        'slope': slope,
+        'intercept': intercept,
+        'residual_std': float(np.std(residuals)),
+    }
 
-    return model_all_features, model_time_based
+def _time_series_cv_splits(n_rows: int, n_splits: int, test_size: float) -> List[Tuple[np.ndarray, np.ndarray]]:
+    n_splits = max(2, min(n_splits, 10))
+    test_len = max(1, int(n_rows * test_size))
+    min_train_len = max(test_len, int(n_rows * 0.2))
+    available_test_rows = n_rows - min_train_len
+    if available_test_rows < test_len:
+        return []
+
+    max_splits = max(1, available_test_rows // test_len)
+    n_splits = min(n_splits, max_splits)
+    splits = []
+
+    for fold in range(n_splits):
+        train_end = min_train_len + fold * test_len
+        test_start = train_end
+        test_end = test_start + test_len
+        if test_end > n_rows:
+            break
+        splits.append((np.arange(0, train_end), np.arange(test_start, test_end)))
+
+    return splits
+
+def _fit_estimator(
+    model_type: str,
+    base_params: Optional[Dict[str, Union[int, float]]],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_eval: Optional[pd.DataFrame] = None,
+    y_eval: Optional[pd.Series] = None
+) -> Union[XGBRegressor, RandomForestRegressor]:
+    model = _build_regressor(model_type, base_params)
+
+    if model_type == 'XGBoost' and X_eval is not None and y_eval is not None and len(X_eval) > 0:
+        early_stopping_rounds = 25
+        try:
+            model.fit(
+                X_train,
+                y_train,
+                eval_set=[(X_eval, y_eval)],
+                early_stopping_rounds=early_stopping_rounds,
+                verbose=False
+            )
+            return model
+        except TypeError:
+            try:
+                model.set_params(early_stopping_rounds=early_stopping_rounds)
+                model.fit(
+                    X_train,
+                    y_train,
+                    eval_set=[(X_eval, y_eval)],
+                    verbose=False
+                )
+                return model
+            except (TypeError, ValueError):
+                pass
+
+    model.fit(X_train, y_train)
+    return model
+
+def _feature_importance(
+    model: Union[XGBRegressor, RandomForestRegressor],
+    features: List[str],
+    top_n: int = 15
+) -> List[Dict[str, float]]:
+    if not hasattr(model, 'feature_importances_'):
+        return []
+
+    importances = np.asarray(model.feature_importances_, dtype=float)
+    if importances.size != len(features):
+        return []
+
+    order = np.argsort(importances)[::-1][:top_n]
+    return [
+        {'feature': features[i], 'importance': float(importances[i])}
+        for i in order
+        if importances[i] > 0
+    ]
+
+def _fit_with_validation(
+    data: pd.DataFrame,
+    target_col: str,
+    features: List[str],
+    model_type: str,
+    base_params: Optional[Dict[str, Union[int, float]]],
+    validation_strategy: str,
+    test_size: float,
+    n_splits: int = 5
+) -> Tuple[Union[XGBRegressor, RandomForestRegressor], Dict[str, Any]]:
+    valid_features = [feature for feature in features if feature in data.columns]
+    if not valid_features:
+        raise ValueError("No valid numeric predictors are available for model training.")
+
+    df_model = data.dropna(subset=[target_col] + valid_features).copy()
+    if len(df_model) < 10:
+        raise ValueError("At least 10 complete rows are required for model training and validation.")
+
+    X = df_model[valid_features]
+    y = df_model[target_col]
+    metrics = {
+        'strategy': validation_strategy,
+        'n_train': len(df_model),
+        'n_test': 0,
+        'n_folds': 0,
+        'r2': np.nan,
+        'rmse': np.nan,
+        'mae': np.nan,
+        'bias': np.nan,
+        'slope': np.nan,
+        'intercept': np.nan,
+        'residual_std': np.nan,
+        'feature_importance': [],
+    }
+
+    if validation_strategy != 'None' and 0 < test_size < 0.5 and len(df_model) >= 20:
+        if validation_strategy == 'Blocked time-series CV':
+            fold_metrics = []
+            splits = _time_series_cv_splits(len(df_model), n_splits=n_splits, test_size=test_size)
+            for train_idx, test_idx in splits:
+                X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+                y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+                validation_model = _fit_estimator(
+                    model_type, base_params, X_train, y_train, X_test, y_test
+                )
+                y_pred = validation_model.predict(X_test)
+                fold_metric = _regression_metrics(y_test, y_pred)
+                fold_metric['n_train'] = len(y_train)
+                fold_metric['n_test'] = len(y_test)
+                fold_metrics.append(fold_metric)
+
+            if fold_metrics:
+                fold_df = pd.DataFrame(fold_metrics)
+                metrics.update({
+                    'n_train': int(fold_df['n_train'].iloc[-1]),
+                    'n_test': int(fold_df['n_test'].sum()),
+                    'n_folds': len(fold_metrics),
+                    'r2': float(fold_df['r2'].mean()),
+                    'rmse': float(fold_df['rmse'].mean()),
+                    'mae': float(fold_df['mae'].mean()),
+                    'bias': float(fold_df['bias'].mean()),
+                    'slope': float(fold_df['slope'].mean()),
+                    'intercept': float(fold_df['intercept'].mean()),
+                    'residual_std': float(fold_df['residual_std'].mean()),
+                    'fold_metrics': fold_metrics,
+                })
+
+        elif validation_strategy == 'Random holdout':
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
+            validation_model = _fit_estimator(
+                model_type, base_params, X_train, y_train, X_test, y_test
+            )
+            y_pred = validation_model.predict(X_test)
+            metrics.update(_regression_metrics(y_test, y_pred))
+            metrics.update({
+                'n_train': len(y_train),
+                'n_test': len(y_test),
+                'n_folds': 1,
+            })
+
+        else:
+            split_idx = int(len(df_model) * (1 - test_size))
+            X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+            y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+            validation_model = _fit_estimator(
+                model_type, base_params, X_train, y_train, X_test, y_test
+            )
+            y_pred = validation_model.predict(X_test)
+            metrics.update(_regression_metrics(y_test, y_pred))
+            metrics.update({
+                'n_train': len(y_train),
+                'n_test': len(y_test),
+                'n_folds': 1,
+            })
+
+    final_model = _fit_estimator(model_type, base_params, X, y)
+    metrics['feature_importance'] = _feature_importance(final_model, valid_features)
+
+    return final_model, metrics
+
+@st.cache_resource(show_spinner=False)
+def train_model(
+    data: pd.DataFrame,
+    target_col: str,
+    selected_features: List[str],
+    time_based_features: List[str],
+    model_type: str = 'Random Forest',
+    base_params: Optional[Dict[str, Union[int, float]]] = None,
+    validation_strategy: str = 'Chronological holdout',
+    test_size: float = 0.2,
+    n_splits: int = 5
+) -> Tuple[Union[XGBRegressor, RandomForestRegressor], Union[XGBRegressor, RandomForestRegressor], Dict[str, Dict[str, Any]]]:
+    """
+    Trains two models: one with selected features and one with time-based features.
+    Returns both trained models.
+    """
+    model_all_features, all_metrics = _fit_with_validation(
+        data=data,
+        target_col=target_col,
+        features=selected_features,
+        model_type=model_type,
+        base_params=base_params,
+        validation_strategy=validation_strategy,
+        test_size=test_size,
+        n_splits=n_splits
+    )
+    model_time_based, time_metrics = _fit_with_validation(
+        data=data,
+        target_col=target_col,
+        features=time_based_features,
+        model_type=model_type,
+        base_params=base_params,
+        validation_strategy=validation_strategy,
+        test_size=test_size,
+        n_splits=n_splits
+    )
+
+    return model_all_features, model_time_based, {
+        'all_features': all_metrics,
+        'time_based': time_metrics
+    }
 
 def introduce_nan(data: pd.DataFrame, target_cols: list, nan_percentage: float = 0.2, 
                   mechanism: str = 'MCAR', dependency_col: str = None, seed: int = 42) -> pd.DataFrame:
@@ -600,37 +814,69 @@ def introduce_nan(data: pd.DataFrame, target_cols: list, nan_percentage: float =
         
     return df_nan
 ## Advanced Flux Visualization
-def plot_flux_partitioning(df: pd.DataFrame) -> pd.DataFrame:
+_BRAND = {"primary": "#1E5631", "secondary": "#4A8B41", "highlight": "#3498DB", "accent": "#88B04B"}
+
+
+def _ensure_datetime_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Make sure a 'datetime' column exists without losing it if it's also the index."""
+    if 'datetime' not in df.columns:
+        if isinstance(df.index, pd.DatetimeIndex):
+            df['datetime'] = df.index
+        elif 'date' in df.columns and 'time' in df.columns:
+            df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%d.%m.%Y %H:%M:%S')
+            df.set_index('datetime', inplace=True, drop=False)
+    return df
+
+
+def _missingness_caption(df: pd.DataFrame, cols: List[str]):
+    """Surface how much of the plotted variables is actually missing, so users don't
+    mistake gaps in these secondary variables for gap-filled (trustworthy) data."""
+    present_cols = [c for c in cols if c in df.columns]
+    if not present_cols:
+        return
+    pct_missing = df[present_cols].isna().mean() * 100
+    worst_col = pct_missing.idxmax()
+    if pct_missing[worst_col] > 0:
+        st.caption(f"⚠️ {worst_col} is {pct_missing[worst_col]:.1f}% missing in this dataset (not gap-filled).")
+
+
+def plot_flux_partitioning(df: pd.DataFrame, filled_target: str = None) -> pd.DataFrame:
     st.subheader("Flux Partitioning Analysis")
-    
+
     # Create tabs for different analyses
     flux_tabs = st.tabs(["Energy Balance", "Carbon Flux", "Bowen Ratio"])
-    
+
     with flux_tabs[0]:
         st.write("### Surface Energy Balance")
-        
+
         # Calculate net radiation
         if all(col in df.columns for col in ['downwelling_shortwave_flux', 'upwelling_shortwave_flux', 'downwelling_longwave_flux', 'upwelling_longwave_flux']):
             df['Rnet'] = (df['downwelling_shortwave_flux'] - df['upwelling_shortwave_flux']) + (df['downwelling_longwave_flux'] - df['upwelling_longwave_flux'])
-            
-            # Create datetime for plotting if not exists
-            if 'datetime' not in df.columns:
-                 df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%d.%m.%Y %H:%M:%S')
-                 df.set_index('datetime', inplace=True)
-                
+            df = _ensure_datetime_column(df)
+            _missingness_caption(df, ['sensible_heat_flux', 'latent_heat_flux', 'Rnet'])
+
             # Create the energy balance plot
             fig = go.Figure()
-            
+
             # Add traces
-            fig.add_trace(go.Scatter(x=df['datetime'], y=df['Rnet'], name='Net Radiation (Rn)'))
-            fig.add_trace(go.Scatter(x=df['datetime'], y=df['sensible_heat_flux'], name='Sensible Heat (H)'))
-            fig.add_trace(go.Scatter(x=df['datetime'], y=df['latent_heat_flux'], name='Latent Heat (LE)'))
-            
+            fig.add_trace(go.Scatter(x=df['datetime'], y=df['Rnet'], name='Net Radiation (Rn)', line=dict(color=_BRAND["accent"])))
+            fig.add_trace(go.Scatter(x=df['datetime'], y=df['sensible_heat_flux'], name='Sensible Heat (H)', line=dict(color=_BRAND["primary"])))
+            fig.add_trace(go.Scatter(x=df['datetime'], y=df['latent_heat_flux'], name='Latent Heat (LE)', line=dict(color=_BRAND["highlight"])))
+
             # Calculate energy balance closure
             df['energy_balance'] = df['sensible_heat_flux'] + df['latent_heat_flux']
-            fig.add_trace(go.Scatter(x=df['datetime'], y=df['energy_balance'], 
-                                    name='sensible_heat_flux + LE', line=dict(dash='dash')))
-            
+            fig.add_trace(go.Scatter(x=df['datetime'], y=df['energy_balance'],
+                                    name='sensible_heat_flux + LE', line=dict(dash='dash', color=_BRAND["secondary"])))
+
+            # Mark gap-filled points if H or LE was the target filled on the Gap-Filling tab
+            if filled_target in ('sensible_heat_flux', 'latent_heat_flux') and 'filled' in df.columns:
+                filled_only = df[filled_target].where(df['filled'] == 1, np.nan)
+                fig.add_trace(go.Scatter(
+                    x=df['datetime'], y=filled_only, mode='markers',
+                    name=f'{filled_target} (gap-filled)',
+                    marker=dict(color='#E67E22', size=6, symbol='diamond')
+                ))
+
             # Update layout
             fig.update_layout(
                 title="Surface Energy Balance",
@@ -710,18 +956,16 @@ def plot_flux_partitioning(df: pd.DataFrame) -> pd.DataFrame:
         st.write("### Carbon Flux Analysis")
         
         if 'co2_flux' in df.columns:
-            # Create datetime for plotting if not exists
-            if 'datetime' not in df.columns:
-                df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%d.%m.%Y %H:%M:%S')
-                df.set_index('datetime', inplace=True)
-                
+            df = _ensure_datetime_column(df)
+            _missingness_caption(df, ['co2_flux'])
+
             # Create carbon flux plot
             fig = go.Figure()
-            
+
             # Add trace
             fig.add_trace(go.Scatter(
-                x=df['datetime'], 
-                y=df['co2_flux'], 
+                x=df['datetime'],
+                y=df['co2_flux'],
                 name='CO₂ Flux',
                 mode='markers+lines',
                 marker=dict(
@@ -732,7 +976,15 @@ def plot_flux_partitioning(df: pd.DataFrame) -> pd.DataFrame:
                     colorbar=dict(title="μmol m⁻² s⁻¹")
                 )
             ))
-            
+
+            if filled_target == 'co2_flux' and 'filled' in df.columns:
+                filled_only = df['co2_flux'].where(df['filled'] == 1, np.nan)
+                fig.add_trace(go.Scatter(
+                    x=df['datetime'], y=filled_only, mode='markers',
+                    name='CO₂ Flux (gap-filled)',
+                    marker=dict(color='#E67E22', size=6, symbol='diamond')
+                ))
+
             # Update layout
             fig.update_layout(
                 title="Carbon Dioxide Flux Time Series",
@@ -882,15 +1134,13 @@ def plot_flux_partitioning(df: pd.DataFrame) -> pd.DataFrame:
             if 'bowen_ratio' not in df.columns:
                 df['bowen_ratio'] = df['sensible_heat_flux'] / df['latent_heat_flux']
                 
-            # Create datetime for plotting if not exists
-            if 'datetime' not in df.columns:
-                df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time'], format='%d.%m.%Y %H:%M:%S')
-                df.set_index('datetime', inplace=True)
-                
+            df = _ensure_datetime_column(df)
+            _missingness_caption(df, ['sensible_heat_flux', 'latent_heat_flux', 'bowen_ratio'])
+
             # Add hour and month columns
             df['hour'] = df['datetime'].dt.hour
             df['month'] = df['datetime'].dt.month
-            
+
             # Create the Bowen ratio plot
             fig = go.Figure()
             
