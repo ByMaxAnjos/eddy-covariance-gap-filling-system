@@ -1203,14 +1203,23 @@ elif st.session_state.active_tab == "Data Preprocessing":
                         qc_removed = 0
                         outlier_removed = 0
 
-                        # Apply QC flags if selected
+                        # Apply QC flags if selected. QC column naming isn't consistent across
+                        # sources (ICOS raw exports prefix "qc_", the bundled example suffixes
+                        # "_qc", verbose custom headers embed it in a sentence), so match each
+                        # QC column to its flux column via the shared flux-variable token
+                        # (e.g. "co2_flux") instead of guessing a naming convention.
                         if apply_qc_flags and qc_columns:
-                            for flux_col in actual_flux_cols_flag:
-                                qc_col = f"qc_{flux_col}"
-                                if qc_col in preprocessed_data.columns and qc_col in qc_thresholds:
+                            for qc_col, threshold in qc_thresholds.items():
+                                matched_flux_col = next(
+                                    (c for flux_var in flux_vars if flux_var in qc_col
+                                     for c in actual_flux_cols_out if flux_var in c),
+                                    None,
+                                )
+                                if matched_flux_col:
                                     # Mark as NaN where QC flag exceeds the per-column threshold
-                                    mask = preprocessed_data[qc_col] > qc_thresholds[qc_col]
-                                    qc_removed += int((mask & preprocessed_data[flux_col].notna()).sum())
+                                    mask = preprocessed_data[qc_col] > threshold
+                                    qc_removed += int((mask & preprocessed_data[matched_flux_col].notna()).sum())
+                                    flux_col = matched_flux_col
                                     preprocessed_data.loc[mask, flux_col] = np.nan
 
                         # Handle outliers if selected

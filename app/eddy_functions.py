@@ -63,9 +63,9 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
 
     # ICOS
     elif 'TIMESTAMP' in df.columns and 'TIMESTAMP_END' in df.columns:
-        df['datetime'] = pd.to_datetime(df['timestamp'])
+        df['datetime'] = pd.to_datetime(df['TIMESTAMP'])
         df.set_index('datetime', inplace=True)
-        df.drop(columns=['timestamp'], inplace=True)
+        df.drop(columns=['TIMESTAMP'], inplace=True)
         return df, "ICOS"
 
     # AmeriFlux
