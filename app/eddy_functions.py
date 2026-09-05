@@ -31,6 +31,7 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
         try:
             df['datetime'] = pd.to_datetime(df['TIMESTAMP_START'], format='%Y%m%d%H%M')
             df.set_index('datetime', inplace=True)
+            df.sort_index(inplace=True)
             df.replace(-9999, np.nan, inplace=True)
             df.drop(columns=['TIMESTAMP_START', 'TIMESTAMP_END'], inplace=True)
             return df, "FLUXNET"
@@ -53,6 +54,7 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
                 df['datetime'] = pd.to_datetime(df['TIMESTAMP'], format='mixed')  # Fallback
 
             df.set_index('datetime', inplace=True)
+            df.sort_index(inplace=True)
             df.replace(-9999, np.nan, inplace=True)
             df.drop(columns=['TIMESTAMP'], inplace=True)
 
@@ -65,6 +67,7 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
     elif 'TIMESTAMP' in df.columns and 'TIMESTAMP_END' in df.columns:
         df['datetime'] = pd.to_datetime(df['TIMESTAMP'])
         df.set_index('datetime', inplace=True)
+        df.sort_index(inplace=True)
         df.drop(columns=['TIMESTAMP'], inplace=True)
         return df, "ICOS"
 
@@ -72,6 +75,7 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
     elif 'TIMESTAMP_START' in df.columns and 'FC' in df.columns:
         df['datetime'] = pd.to_datetime(df['TIMESTAMP_START'], format='%Y%m%d%H%M')
         df.set_index('datetime', inplace=True)
+        df.sort_index(inplace=True)
         df.drop(columns=['TIMESTAMP_START'], inplace=True)
         return df, "AMERIFLUX"
 
@@ -79,6 +83,7 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
     elif 'date' in df.columns and 'time (UTC)' in df.columns and 'upward mole flux of carbon dioxide in air (1e-6 mol s-1 m-2) (co2_flux)' in df.columns:
         df['datetime'] = pd.to_datetime(df['date'] + ' ' + df['time (UTC)'], format='%d.%m.%Y %H:%M:%S')
         df.set_index('datetime', inplace=True)
+        df.sort_index(inplace=True)
         df.drop(columns=['date', 'time (UTC)'], inplace=True)
         return df, "EC Tower"
     
@@ -102,8 +107,11 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
 
         if found_time_col:
             try:
-                df['datetime'] = pd.to_datetime(df[found_time_col])
+                # format='mixed' handles files where some rows are date-only
+                # (implicit midnight) and others carry a full timestamp.
+                df['datetime'] = pd.to_datetime(df[found_time_col], format='mixed')
                 df.set_index('datetime', inplace=True)
+                df.sort_index(inplace=True)
                 df.drop(columns=[found_time_col], inplace=True)
                 return df, "GENERAL TIME SERIES"
             except Exception as e:
