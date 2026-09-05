@@ -122,6 +122,56 @@ def detect_and_preprocess_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
             return df, "UNKNOWN (no time column)"
 
 
+# QC/flag column markers seen across sources: FLUXNET2015 suffixes "_QC",
+# AmeriFlux BASE / EddyPro insert "_SSITC_TEST" before the replicate suffix,
+# ICOS raw exports prefix "qc_", and the bundled example dataset suffixes "_qc".
+_QC_MARKERS = ['_SSITC_TEST', '_QC']
+
+
+def is_qc_like_column(col: str) -> bool:
+    """True if a column name looks like a QC/quality-flag column rather than a measurement."""
+    c = col.lower()
+    return 'qc' in c or 'ssitc' in c
+
+
+def match_qc_to_flux_column(qc_col: str, flux_cols: List[str], flux_vars: Optional[List[str]] = None) -> Optional[str]:
+    """Find which flux column a QC/flag column corresponds to.
+
+    Tries stripping each known QC marker first (exact match), since that
+    covers FLUXNET, AmeriFlux BASE, and ICOS raw naming. Falls back to a
+    shared flux-variable token (e.g. "co2_flux") for verbose custom headers
+    where the QC column name doesn't reduce to the flux column name exactly.
+    """
+    import re
+    for marker in _QC_MARKERS:
+        candidate = re.sub(marker, '', qc_col, flags=re.IGNORECASE)
+        if candidate != qc_col and candidate in flux_cols:
+            return candidate
+    if qc_col.lower().startswith('qc_'):
+        candidate = qc_col[3:]
+        if candidate in flux_cols:
+            return candidate
+    for flux_var in (flux_vars or []):
+        if flux_var in qc_col:
+            for c in flux_cols:
+                if flux_var in c:
+                    return c
+    return None
+
+
+def _test_qc_matching():
+    assert is_qc_like_column('FC_SSITC_TEST_1_1_1') and is_qc_like_column('co2_flux_qc')
+    assert not is_qc_like_column('FC_1_1_1')
+    flux_cols = ['FC_1_1_1', 'H_1_1_1', 'co2_flux', 'latent_heat_flux']
+    assert match_qc_to_flux_column('FC_SSITC_TEST_1_1_1', flux_cols) == 'FC_1_1_1'
+    assert match_qc_to_flux_column('NEE_VUT_REF_QC', ['NEE_VUT_REF']) == 'NEE_VUT_REF'
+    assert match_qc_to_flux_column('qc_co2_flux', flux_cols) == 'co2_flux'
+    assert match_qc_to_flux_column('co2_flux_qc', flux_cols) == 'co2_flux'
+    flux_vars = ["co2_flux", "latent_heat_flux", "sensible_heat_flux"]
+    verbose_flux = 'upward mole flux of carbon dioxide in air (1e-6 mol s-1 m-2) (co2_flux)'
+    verbose_qc = 'quality flag upward mole flux of carbon dioxide in air (cat) (qc_co2_flux)'
+    assert match_qc_to_flux_column(verbose_qc, [verbose_flux], flux_vars) == verbose_flux
+
 
 def upload_zip_and_extract_csv() -> Tuple[pd.DataFrame, str]:
     uploaded_zip = st.file_uploader("📦 Upload ZIP file with FLUXNET/ICOS/AmeriFlux CSV", type=["zip"])
@@ -253,7 +303,10 @@ def create_time_features(data: pd.DataFrame, datetime_col='datetime') -> pd.Data
     df['hour_decimal'] = df['hour'] + df[datetime_col].dt.minute / 60.0
 
     season_map = {12: 0, 1: 0, 2: 0, 3: 1, 4: 1, 5: 1, 6: 2, 7: 2, 8: 2, 9: 3, 10: 3, 11: 3}
-    df['season'] = df['month'].map(season_map)
+    # Fix the category list so all 4 season_* dummy columns always exist, even
+    # when this particular data subset (e.g. after dropping NaN rows) only
+    # spans a few months and pd.get_dummies would otherwise emit fewer columns.
+    df['season'] = pd.Categorical(df['month'].map(season_map), categories=[0, 1, 2, 3])
     season_dummies = pd.get_dummies(df['season'], prefix='season')
     df = pd.concat([df, season_dummies], axis=1)
 
@@ -615,6 +668,16 @@ def _fit_with_validation(
     if not valid_features:
         raise ValueError("No valid numeric predictors are available for model training.")
 
+    # A predictor that's entirely missing (common with unused AmeriFlux/FLUXNET
+    # replicate sensor slots, e.g. a station with no RH_1_9_1 sensor) can never
+    # contribute to a complete-case row -- keeping it would force dropna() to
+    # zero rows regardless of how much data every other column has. Drop it
+    # instead of failing training outright.
+    empty_features = [f for f in valid_features if data[f].notna().sum() == 0]
+    valid_features = [f for f in valid_features if f not in empty_features]
+    if not valid_features:
+        raise ValueError("No valid numeric predictors are available for model training.")
+
     df_model = data.dropna(subset=[target_col] + valid_features).copy()
     if len(df_model) < 10:
         raise ValueError("At least 10 complete rows are required for model training and validation.")
@@ -634,6 +697,7 @@ def _fit_with_validation(
         'intercept': np.nan,
         'residual_std': np.nan,
         'feature_importance': [],
+        'dropped_empty_features': empty_features,
     }
 
     if validation_strategy != 'None' and 0 < test_size < 0.5 and len(df_model) >= 20:
@@ -700,6 +764,7 @@ def _fit_with_validation(
 
     final_model = _fit_estimator(model_type, base_params, X, y)
     metrics['feature_importance'] = _feature_importance(final_model, valid_features)
+    metrics['used_features'] = valid_features
 
     return final_model, metrics
 
@@ -1254,3 +1319,8 @@ def plot_flux_partitioning(df: pd.DataFrame, filled_target: str = None) -> pd.Da
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
+
+
+if __name__ == '__main__':
+    _test_qc_matching()
+    print('QC matching self-test passed.')

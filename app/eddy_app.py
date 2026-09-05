@@ -33,6 +33,7 @@ import textwrap
 from eddy_functions import upload_zip_and_extract_csv,load_example_data, create_time_features, create_lag_features, create_rolling_features, calculate_vpd, create_met_features, encode_categorical_features
 from eddy_functions import train_model, introduce_nan, plot_flux_partitioning
 from eddy_functions import detect_and_preprocess_dataset
+from eddy_functions import is_qc_like_column, match_qc_to_flux_column
 
 # Set page configuration
 st.set_page_config(
@@ -71,6 +72,12 @@ def load_translations(language_code: str) -> Dict[str, str]:
         with open(locale_path, encoding="utf-8") as f:
             translations.update(json.load(f))
     return translations
+
+
+@st.cache_data(show_spinner="Parsing uploaded file...")
+def _load_and_detect_csv(file_bytes: bytes):
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    return detect_and_preprocess_dataset(df)
 
 def tr(key: str, default: Optional[str] = None, **kwargs) -> str:
     translations = st.session_state.get("translations", {})
@@ -848,8 +855,11 @@ if st.session_state.active_tab == "Upload & Explore":
             uploaded_file = st.file_uploader("📄 Upload CSV or TXT", type=["csv", "txt"])
             if uploaded_file is not None:
                 try:
-                    df = pd.read_csv(uploaded_file)
-                    df, source = detect_and_preprocess_dataset(df)
+                    # Streamlit reruns this whole script on every widget interaction
+                    # (e.g. the variable selectors further down this tab). Without
+                    # caching, a large CSV gets re-parsed from scratch on every one
+                    # of those reruns even though the uploaded file hasn't changed.
+                    df, source = _load_and_detect_csv(uploaded_file.getvalue())
                     st.session_state.data = df
                     st.session_state.original_data = df.copy()
                     st.success(f"✅ File loaded. Format detected: **{source}**")
@@ -1083,15 +1093,15 @@ elif st.session_state.active_tab == "Data Preprocessing":
         numeric_cols_all = st.session_state.data.select_dtypes(include=['number']).columns.tolist()
         actual_flux_cols_out = [
             col for col in numeric_cols_all
-            if col not in non_numeric_like and "qc" not in col.lower()
+            if col not in non_numeric_like and not is_qc_like_column(col)
         ]
 
         # Candidate columns for QC filtering: anything that looks like a flag column
-        qc_like_cols = [col for col in st.session_state.data.columns if "qc" in col.lower()]
+        qc_like_cols = [col for col in st.session_state.data.columns if is_qc_like_column(col)]
 
-        #For flag
+        # Vocabulary used as a fallback to pair a QC column with its flux column
+        # when the name doesn't reduce to it exactly (verbose custom headers).
         flux_vars = ["co2_flux", "latent_heat_flux", "sensible_heat_flux"]
-        actual_flux_cols_flag = [col for col in st.session_state.data.columns if any(flux_var in col for flux_var in flux_vars)]
 
         col1, col2 = st.columns([1, 1])
 
@@ -1204,17 +1214,12 @@ elif st.session_state.active_tab == "Data Preprocessing":
                         outlier_removed = 0
 
                         # Apply QC flags if selected. QC column naming isn't consistent across
-                        # sources (ICOS raw exports prefix "qc_", the bundled example suffixes
-                        # "_qc", verbose custom headers embed it in a sentence), so match each
-                        # QC column to its flux column via the shared flux-variable token
-                        # (e.g. "co2_flux") instead of guessing a naming convention.
+                        # sources (FLUXNET suffixes "_QC", AmeriFlux/EddyPro inserts
+                        # "_SSITC_TEST", ICOS raw exports prefix "qc_", the bundled example
+                        # suffixes "_qc") -- match_qc_to_flux_column() handles all of them.
                         if apply_qc_flags and qc_columns:
                             for qc_col, threshold in qc_thresholds.items():
-                                matched_flux_col = next(
-                                    (c for flux_var in flux_vars if flux_var in qc_col
-                                     for c in actual_flux_cols_out if flux_var in c),
-                                    None,
-                                )
+                                matched_flux_col = match_qc_to_flux_column(qc_col, actual_flux_cols_out, flux_vars)
                                 if matched_flux_col:
                                     # Mark as NaN where QC flag exceeds the per-column threshold
                                     mask = preprocessed_data[qc_col] > threshold
@@ -1615,7 +1620,12 @@ elif st.session_state.active_tab == "Model Training":
 
                         st.session_state.models[model_key_all] = {
                             'model': model_all,
-                            'features': selected_features,
+                            # Features actually used to fit the model, not the raw
+                            # selection -- predictors that were entirely empty (see
+                            # dropped_empty_features) were excluded during training,
+                            # and gap-filling must check availability against the
+                            # same list the model expects.
+                            'features': validation_metrics['all_features'].get('used_features', selected_features),
                             'feature_set': 'all',
                             'validation': validation_metrics['all_features'],
                             'metadata': {
@@ -1633,7 +1643,9 @@ elif st.session_state.active_tab == "Model Training":
 
                         st.session_state.models[model_key_time] = {
                             'model': model_time,
-                            'features': [f for f in time_based_features if f in processed_data.columns],
+                            'features': validation_metrics['time_based'].get(
+                                'used_features', [f for f in time_based_features if f in processed_data.columns]
+                            ),
                             'feature_set': 'time_based',
                             'validation': validation_metrics['time_based'],
                             'metadata': {
@@ -1650,6 +1662,11 @@ elif st.session_state.active_tab == "Model Training":
                         }
 
                         st.success(tr("✅ Models for `{target_col}` trained and stored!").format(target_col=target_col))
+                        dropped_empty = validation_metrics['all_features'].get('dropped_empty_features', [])
+                        if dropped_empty:
+                            st.info(tr("ℹ️ {n} predictor(s) had no data at all and were excluded automatically: {cols}").format(
+                                n=len(dropped_empty), cols=", ".join(f"`{c}`" for c in dropped_empty)
+                            ))
                         if validation_strategy != "None":
                             metrics_df = pd.DataFrame(validation_metrics).T
                             display_cols = [
@@ -1939,7 +1956,13 @@ elif st.session_state.active_tab == "Gap-Fill Evaluation":
                     df = st.session_state.data.copy()
                     df_gapfilled = df.copy()
                     df_gapfilled['filled'] = 0
-                    df_gapfilled.dropna(inplace=True)
+                    # Only the target needs to be complete here -- introduce_nan()
+                    # injects artificial gaps into it and needs genuine ground truth
+                    # to compare against. Requiring every other column to be
+                    # non-null too (as before) drops the entire dataset on any
+                    # real file with typical per-sensor missingness spread across
+                    # dozens of columns.
+                    df_gapfilled.dropna(subset=[selected_target], inplace=True)
                     # Ensure datetime column exists
                     if 'datetime' not in df_gapfilled.columns:
                         if 'date' in df_gapfilled.columns and 'time (UTC)' in df_gapfilled.columns:
@@ -1963,7 +1986,7 @@ elif st.session_state.active_tab == "Gap-Fill Evaluation":
                     cat_cols = ['wind_dir_cat', 'stability_class']
                     cat_cols = [col for col in cat_cols if col in df_gapfilled.columns]
                     df_gapfilled = encode_categorical_features(df_gapfilled, cat_cols)
-                    
+
                     #df_gapfilled_with_na = introduce_nan(df_gapfilled.copy(), [selected_target], nan_percentage, seed=42)
                     df_gapfilled_with_na = introduce_nan(
                         data=df_gapfilled.copy(), 
